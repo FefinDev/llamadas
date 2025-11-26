@@ -1,4 +1,7 @@
 {
-  "users": {},
-  "calls": {}
+    "caller": null,
+    "target": null,
+    "offer": null,
+    "answer": null,
+    "candidates": []
 }
