@@ -1,193 +1,200 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Fefin Calls</title>
+<meta charset="UTF-8" />
+<title>FefinCall</title>
+
 <style>
     body {
         margin: 0;
-        background: #111;
         font-family: Arial;
-        display: flex;
-        height: 100vh;
+        background: #111;
         color: white;
     }
 
-    #sidebar {
-        width: 30%;
-        background: #1c1c1c;
-        border-right: 1px solid #333;
+    #app {
         display: flex;
-        flex-direction: column;
+        height: 100vh;
     }
 
-    #header {
-        background: #075E54;
-        padding: 15px;
-        font-size: 20px;
+    #sidebar {
+        width: 300px;
+        background: #202c33;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .title {
+        margin: 0;
+        font-size: 26px;
+        text-align: center;
+        color: #25d366;
+    }
+
+    input {
+        width: 100%;
+        padding: 10px;
+        border-radius: 6px;
+        border: none;
+        background: #111b21;
+        color: white;
+        font-size: 16px;
+    }
+
+    button {
+        padding: 12px;
+        background: #25d366;
+        color: black;
+        border: none;
+        font-size: 18px;
+        border-radius: 6px;
+        cursor: pointer;
         font-weight: bold;
     }
 
-    #users {
-        flex: 1;
-        overflow-y: auto;
-        padding: 10px;
-    }
-
-    .user {
-        background: #222;
-        padding: 12px;
-        margin-bottom: 8px;
-        border-radius: 8px;
+    button:hover {
+        background: #1faa55;
     }
 
     #main {
         flex: 1;
-        padding: 20px;
+        background: #0b1418;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 15px;
     }
 
-    input, textarea {
-        width: 100%;
-        background: #222;
-        border: 1px solid #444;
-        color: white;
-        padding: 10px;
-        border-radius: 6px;
-        margin-top: 10px;
-    }
-
-    button {
-        padding: 10px;
-        background: #25D366;
-        border: none;
+    video {
+        width: 45%;
+        background: black;
         border-radius: 8px;
-        margin-top: 10px;
-        font-size: 18px;
-        cursor: pointer;
     }
-
 </style>
 </head>
+
 <body>
 
-<div id="sidebar">
-    <div id="header">Fefin Calls</div>
-    <div id="users">Cargando usuarios…</div>
-</div>
+<div id="app">
 
-<div id="main">
-    <h2>Crear llamada</h2>
+    <div id="sidebar">
+        <h2 class="title">FefinCall</h2>
 
-    <input id="username" placeholder="Tu nombre">
-    <button onclick="registerUser()">Registrar</button>
+        <input id="username" placeholder="Tu nombre..." />
+        <input id="target" placeholder="Usuario a llamar..." />
 
-    <button onclick="createCall()">Crear llamada</button>
-    <input id="callCode" placeholder="Código de llamada" readonly>
+        <button id="callBtn">Llamar</button>
+        <button id="answerBtn" style="background:#34b7f1;">Responder</button>
+    </div>
 
-    <h2>Unirse a una llamada</h2>
-    <input id="joinCode" placeholder="Código de llamada…">
-    <button onclick="joinCall()">Unirse</button>
+    <div id="main">
+        <video id="localVideo" autoplay muted></video>
+        <video id="remoteVideo" autoplay></video>
+    </div>
 
-    <h2>Offer / Answer</h2>
-    <button onclick="createOffer()">Generar Offer</button>
-    <textarea id="offerBox"></textarea>
-
-    <textarea id="answerBox" placeholder="Pega aquí el ANSWER"></textarea>
-    <button onclick="applyAnswer()">Aplicar Answer</button>
 </div>
 
 <script>
-const REPO = "TU_USUARIO/TU_REPO";
-const RAW = "https://raw.githubusercontent.com/" + REPO + "/main/calls.json";
+// URLs de tu repo GitHub RAW
+const CALLS_URL = "https://raw.githubusercontent.com/FefinDev/llamadas/main/calls.json";
+const UPDATE_URL = "http://localhost:5000/update";
 
-let pc = new RTCPeerConnection();
+// WebRTC
+let localStream;
+let pc;
 
-async function loadDB() {
-    let res = await fetch(RAW + "?cache=" + Math.random());
-    return await res.json();
-}
+// elementos
+const callBtn = document.getElementById("callBtn");
+const answerBtn = document.getElementById("answerBtn");
 
-async function updateDB(db) {
-    await fetch("https://api.github.com/repos/" + REPO + "/contents/calls.json", {
-        method: "PUT",
-        headers: {
-            "Authorization": "Bearer TU_TOKEN",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            message: "update calls",
-            content: btoa(JSON.stringify(db, null, 2)),
-            sha: window.lastSha
-        })
+const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+
+async function startLocalVideo() {
+    localStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
     });
+    localVideo.srcObject = localStream;
 }
 
-async function registerUser() {
-    let name = document.getElementById("username").value;
-    let db = await loadDB();
+async function createPeer() {
+    pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
 
-    db.users[name] = { online: true };
+    // enviar streams
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
-    await updateDB(db);
-    loadUsers();
-}
-
-async function loadUsers() {
-    let db = await loadDB();
-    let html = "";
-
-    for (let u in db.users) {
-        html += `<div class='user'>${u}</div>`;
-    }
-
-    document.getElementById("users").innerHTML = html;
-}
-
-async function createCall() {
-    let name = document.getElementById("username").value;
-    let id = Math.floor(Math.random() * 9000 + 1000);
-
-    let code = `${name}_call${id}`;
-    document.getElementById("callCode").value = code;
-
-    let db = await loadDB();
-    db.calls[code] = { offer: "", answer: "" };
-    await updateDB(db);
-}
-
-async function joinCall() {
-    let code = document.getElementById("joinCode").value;
-    document.getElementById("callCode").value = code;
-}
-
-async function createOffer() {
-    pc.onicecandidate = () => {
-        offerBox.value = JSON.stringify(pc.localDescription);
+    // cuando llega video remoto
+    pc.ontrack = e => {
+        remoteVideo.srcObject = e.streams[0];
     };
+}
 
-    let offer = await pc.createOffer();
+async function call() {
+    const user = document.getElementById("username").value;
+    const target = document.getElementById("target").value;
+
+    await createPeer();
+
+    const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    let db = await loadDB();
-    db.calls[document.getElementById("callCode").value].offer = offerBox.value;
-    await updateDB(db);
+    // mandar offer al repo vía tu server.py
+    await fetch(UPDATE_URL, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            caller: user,
+            target: target,
+            offer: offer
+        })
+    });
+
+    alert("Oferta enviada");
 }
 
-async function applyAnswer() {
-    let ans = JSON.parse(answerBox.value);
-    await pc.setRemoteDescription(ans);
+async function answer() {
+    const user = document.getElementById("username").value;
 
-    let db = await loadDB();
-    db.calls[document.getElementById("callCode").value].answer =
-        answerBox.value;
+    // leer la offer del repo
+    const data = await fetch(CALLS_URL).then(r => r.json());
 
-    await updateDB(db);
+    const offer = data.offer;
+    const caller = data.caller;
 
-    alert("Answer aplicado");
+    if (!offer) {
+        return alert("No hay llamadas entrantes");
+    }
+
+    await createPeer();
+
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    // enviar answer
+    await fetch(UPDATE_URL, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            answer: answer,
+            caller: caller,
+            target: user
+        })
+    });
+
+    alert("Respuesta enviada");
 }
 
-loadUsers();
-setInterval(loadUsers, 5000);
+callBtn.onclick = call;
+answerBtn.onclick = answer;
+
+// iniciar cámara
+startLocalVideo();
 </script>
 
 </body>
