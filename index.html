@@ -5,53 +5,62 @@
     <title>WebRTC Signaling</title>
     <style>
         body {
-            background: #121212;
-            color: white;
+            background: #111;
+            color: #eee;
             font-family: Arial, sans-serif;
             padding: 20px;
         }
+        h1,h2 { color: #25d366; }
         textarea {
             width: 100%;
-            height: 180px;
-            margin-bottom: 15px;
-            background: #1e1e1e;
-            color: #00e676;
+            height: 160px;
+            background: #1c1c1c;
+            color: #25d366;
             border: 1px solid #333;
             padding: 10px;
+            margin-bottom: 15px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #1c1c1c;
+            color: #25d366;
+            border: 1px solid #333;
         }
         button {
-            padding: 12px;
+            padding: 14px;
             width: 100%;
-            background: #00e676;
+            font-size: 18px;
+            background: #25d366;
             border: none;
             color: black;
             cursor: pointer;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        h2 {
-            color: #00e676;
+            margin-bottom: 15px;
         }
     </style>
 </head>
 <body>
-    <h1>WebRTC Manual Signaling</h1>
+    <h1>WhatsApp Call – WebRTC Signaling</h1>
 
-    <h2>1. Oferta (copiar y enviar a tu amigo)</h2>
-    <textarea id="offer" placeholder="Aquí irá la oferta generada por Python"></textarea>
+    <h2>1. Codigo de llamada</h2>
+    <input id="callcode" placeholder="Ej: fefin_call0042">
 
-    <h2>2. Respuesta (pegar la respuesta de tu amigo)</h2>
-    <textarea id="answer" placeholder="Aquí pega la respuesta"></textarea>
+    <h2>2. Oferta</h2>
+    <textarea id="offer" placeholder="Pega aquí la oferta"></textarea>
 
-    <button onclick="copyOffer()">Copiar oferta ✔</button>
+    <h2>3. Respuesta</h2>
+    <textarea id="answer" placeholder="Aquí aparecerá la respuesta (para copiar)"></textarea>
+
+    <button onclick="copyAnswer()">Copiar respuesta ✔</button>
 
     <script>
-        function copyOffer() {
-            const offer = document.getElementById("offer");
-            offer.select();
+        function copyAnswer() {
+            const ans = document.getElementById("answer");
+            ans.select();
             document.execCommand("copy");
-            alert("Oferta copiada");
+            alert("Respuesta copiada");
         }
     </script>
+
 </body>
 </html>
