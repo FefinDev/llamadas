@@ -1,200 +1,111 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>FefinCall</title>
-
 <style>
-    body {
-        margin: 0;
-        font-family: Arial;
-        background: #111;
-        color: white;
-    }
-
-    #app {
-        display: flex;
-        height: 100vh;
-    }
-
-    #sidebar {
-        width: 300px;
-        background: #202c33;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-    }
-
-    .title {
-        margin: 0;
-        font-size: 26px;
-        text-align: center;
-        color: #25d366;
-    }
-
-    input {
-        width: 100%;
-        padding: 10px;
-        border-radius: 6px;
-        border: none;
-        background: #111b21;
-        color: white;
-        font-size: 16px;
-    }
-
-    button {
-        padding: 12px;
-        background: #25d366;
-        color: black;
-        border: none;
-        font-size: 18px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: bold;
-    }
-
-    button:hover {
-        background: #1faa55;
-    }
-
-    #main {
-        flex: 1;
-        background: #0b1418;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 15px;
-    }
-
-    video {
-        width: 45%;
-        background: black;
-        border-radius: 8px;
-    }
+body { background:#111; color:white; font-family:Arial; margin:0; display:flex; flex-direction:column; align-items:center; }
+h2 { margin-top:20px; }
+#controls { margin: 15px; display:flex; gap:10px; }
+#videos { display:flex; justify-content:center; margin-top:10px; gap:10px; }
+video { width:45%; border-radius:10px; background:black; }
+button { padding:10px 15px; border:none; border-radius:8px; cursor:pointer; }
+#room { padding:10px; border-radius:8px; border:none; width:150px; }
+#status { margin-top:10px; font-size:14px; color:#0a0; }
+#controls button { background:#0a8400; color:white; }
+#controls button.off { background:#a00; }
 </style>
 </head>
-
 <body>
 
-<div id="app">
+<h2>📞 FefinCall WebRTC P2P</h2>
 
-    <div id="sidebar">
-        <h2 class="title">FefinCall</h2>
-
-        <input id="username" placeholder="Tu nombre..." />
-        <input id="target" placeholder="Usuario a llamar..." />
-
-        <button id="callBtn">Llamar</button>
-        <button id="answerBtn" style="background:#34b7f1;">Responder</button>
-    </div>
-
-    <div id="main">
-        <video id="localVideo" autoplay muted></video>
-        <video id="remoteVideo" autoplay></video>
-    </div>
-
+<div id="controls">
+  <input id="room" placeholder="Código de sala">
+  <button onclick="startCall()">Iniciar</button>
+  <button onclick="hangup()">Colgar</button>
+  <button id="micBtn" onclick="toggleMic()">Mic On/Off</button>
+  <button id="camBtn" onclick="toggleCam()">Cam On/Off</button>
 </div>
 
+<div id="videos">
+  <video id="local" autoplay playsinline muted></video>
+  <video id="remote" autoplay playsinline></video>
+</div>
+
+<div id="status">Status: Desconectado</div>
+
 <script>
-// URLs de tu repo GitHub RAW
-const CALLS_URL = "https://raw.githubusercontent.com/FefinDev/llamadas/main/calls.json";
-const UPDATE_URL = "http://localhost:5000/update";
+let pc, ws, localStream;
+let micEnabled = true, camEnabled = true;
 
-// WebRTC
-let localStream;
-let pc;
-
-// elementos
-const callBtn = document.getElementById("callBtn");
-const answerBtn = document.getElementById("answerBtn");
-
-const localVideo = document.getElementById("localVideo");
-const remoteVideo = document.getElementById("remoteVideo");
-
-async function startLocalVideo() {
-    localStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
-    });
-    localVideo.srcObject = localStream;
+function randomRoom() {
+  return "fefin_call" + Math.floor(1000 + Math.random()*9000);
 }
 
-async function createPeer() {
-    pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
+async function startCall() {
+  const roomInput = document.getElementById("room");
+  if(!roomInput.value) roomInput.value = randomRoom();
+  const room = roomInput.value;
 
-    // enviar streams
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  document.getElementById("status").innerText = "Status: Conectando...";
 
-    // cuando llega video remoto
-    pc.ontrack = e => {
-        remoteVideo.srcObject = e.streams[0];
-    };
+  ws = new WebSocket("wss://fefin-calls.fefin.workers.dev/?room=" + room);
+  ws.onmessage = e => handleSignal(JSON.parse(e.data));
+  ws.onopen = () => document.getElementById("status").innerText = "Status: Conectado a sala " + room;
+
+  pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
+
+  pc.onicecandidate = e => { if(e.candidate) ws.send(JSON.stringify({ candidate:e.candidate })); };
+  pc.ontrack = e => document.getElementById("remote").srcObject = e.streams[0];
+
+  localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
+  document.getElementById("local").srcObject = localStream;
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  ws.send(JSON.stringify({ offer }));
 }
 
-async function call() {
-    const user = document.getElementById("username").value;
-    const target = document.getElementById("target").value;
+function send(msg) { if(ws) ws.send(JSON.stringify(msg)); }
 
-    await createPeer();
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    // mandar offer al repo vía tu server.py
-    await fetch(UPDATE_URL, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            caller: user,
-            target: target,
-            offer: offer
-        })
-    });
-
-    alert("Oferta enviada");
-}
-
-async function answer() {
-    const user = document.getElementById("username").value;
-
-    // leer la offer del repo
-    const data = await fetch(CALLS_URL).then(r => r.json());
-
-    const offer = data.offer;
-    const caller = data.caller;
-
-    if (!offer) {
-        return alert("No hay llamadas entrantes");
-    }
-
-    await createPeer();
-
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+async function handleSignal(msg) {
+  if(msg.offer){
+    await pc.setRemoteDescription(msg.offer);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-
-    // enviar answer
-    await fetch(UPDATE_URL, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            answer: answer,
-            caller: caller,
-            target: user
-        })
-    });
-
-    alert("Respuesta enviada");
+    send({ answer });
+  }
+  if(msg.answer) await pc.setRemoteDescription(msg.answer);
+  if(msg.candidate) pc.addIceCandidate(msg.candidate);
 }
 
-callBtn.onclick = call;
-answerBtn.onclick = answer;
+function hangup() {
+  if(pc) pc.close();
+  pc = null;
+  if(ws) ws.close();
+  ws = null;
+  if(localStream){
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  document.getElementById("status").innerText = "Status: Desconectado";
+}
 
-// iniciar cámara
-startLocalVideo();
+function toggleMic() {
+  if(!localStream) return;
+  micEnabled = !micEnabled;
+  localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
+  document.getElementById("micBtn").classList.toggle("off", !micEnabled);
+}
+
+function toggleCam() {
+  if(!localStream) return;
+  camEnabled = !camEnabled;
+  localStream.getVideoTracks().forEach(t => t.enabled = camEnabled);
+  document.getElementById("camBtn").classList.toggle("off", !camEnabled);
+}
 </script>
 
 </body>
